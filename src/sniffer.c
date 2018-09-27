@@ -6,13 +6,14 @@
 #include<arpa/inet.h>
 #include <zconf.h>
 #include <err.h>
+#include <syslog.h>
 
 void process(unsigned char* buffer);
 
 int sock_raw;
 FILE *logfile;
 
-int main()
+int sniff()
 {
     int saddr_size , data_size;
     struct sockaddr saddr;
@@ -52,12 +53,12 @@ int main()
         printf("+\n");
         process(buffer);
         counter++;
-
-        if(counter >= 10){
-            close(sock_raw);
-            printf("Finished");
-            return 0;
-        }
+//
+//        if(counter >= 10){
+//            close(sock_raw);
+//            printf("Finished");
+//            return 0;
+//        }
     }
 
 }
@@ -70,6 +71,9 @@ void process(unsigned char* buffer){
     {
         octet[i] = ( iph->saddr >> (i*8) ) & 0xFF;
     }
-
     printf("%d.%d.%d.%d\n",octet[3],octet[2],octet[1],octet[0]);
+
+    char str[80];
+    sprintf(str, "CONNECTION:%d.%d.%d.%d\n",octet[3],octet[2],octet[1],octet[0]);
+    syslog (LOG_NOTICE, str);
 }
