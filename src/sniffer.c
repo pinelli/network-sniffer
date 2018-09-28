@@ -7,11 +7,31 @@
 #include <zconf.h>
 #include <err.h>
 #include <syslog.h>
+#include <bits/types/siginfo_t.h>
+#include <signal.h>
 
 void process(unsigned char* buffer);
 
 int sock_raw;
 FILE *logfile;
+
+void sig_term_handler(int signum, siginfo_t *info, void *ptr)
+{
+    fprintf(logfile, "Daemon terminated\n");
+    fflush(logfile);
+    close(sock_raw);
+}
+
+void catch_sigterm()
+{
+    static struct sigaction _sigact;
+
+    memset(&_sigact, 0, sizeof(_sigact));
+    _sigact.sa_sigaction = sig_term_handler;
+    _sigact.sa_flags = SA_SIGINFO;
+
+    sigaction(SIGTERM, &_sigact, NULL);
+}
 
 int sniff()
 {
@@ -21,13 +41,22 @@ int sniff()
     unsigned char *buffer = (unsigned char *)malloc(65536);
 
     logfile=fopen("log.txt","w");
-    if(logfile==NULL) printf("Unable to create file.");
-    printf("Starting...\n");
-    //Create a raw socket that shall sniff
+
+    catch_sigterm();
+
+    if(logfile==NULL){
+        syslog (LOG_NOTICE, "Unable to crate a file \n");
+        return 1;
+    }
+
+    fprintf(logfile, "Starting...\n");
+    fflush(logfile);
+
     sock_raw = socket(AF_INET , SOCK_RAW , IPPROTO_TCP);
     if(sock_raw < 0)
     {
-        printf("Socket Error\n");
+        fprintf(logfile, "Socket Error\n");
+        fflush(logfile);
         return 1;
     }
 
@@ -36,31 +65,16 @@ int sniff()
     if (rc < 0)
         err(1, "Failed binding socket to ifname %s", ifname);
 
-    int counter = 0;
     while(1)
     {
         saddr_size = sizeof saddr;
-        //Receive a packet
         data_size = recvfrom(sock_raw , buffer , 65536 , 0 , &saddr , &saddr_size);
-        if(data_size <0 )
-        {
-            printf("Recvfrom error , failed to get packets\n");
-            return 1;
-        }
+        if(data_size < 0 )
+            break;
 
-        //Now process the packet
-
-        printf("+\n");
         process(buffer);
-        counter++;
-//
-//        if(counter >= 10){
-//            close(sock_raw);
-//            printf("Finished");
-//            return 0;
-//        }
     }
-
+    fprintf(logfile, "Exit");
 }
 
 void process(unsigned char* buffer){
@@ -71,9 +85,7 @@ void process(unsigned char* buffer){
     {
         octet[i] = ( iph->saddr >> (i*8) ) & 0xFF;
     }
-    printf("%d.%d.%d.%d\n",octet[3],octet[2],octet[1],octet[0]);
 
-    char str[80];
-    sprintf(str, "CONNECTION:%d.%d.%d.%d\n",octet[3],octet[2],octet[1],octet[0]);
-    syslog (LOG_NOTICE, str);
+    fprintf(logfile, "CONNECTION:%d.%d.%d.%d\n",octet[3],octet[2],octet[1],octet[0]);
+    fflush(logfile);
 }

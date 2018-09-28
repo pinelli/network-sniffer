@@ -2,7 +2,7 @@
 // Created by alexander on 28.09.18.
 //
 
-#include "sniffer.h"
+#include "../include/sniffer.h"
 /*
  * daemonize.c
  * This example daemonizes a process, writes a few log messages,
@@ -57,7 +57,8 @@ static void skeleton_daemon()
 
     /* Change the working directory to the root directory */
     /* or another appropriated directory */
-    chdir("/");
+
+    // chdir("/");
 
     /* Close all open file descriptors */
     int x;
@@ -73,6 +74,7 @@ static void skeleton_daemon()
 
 int main()
 {
+
     skeleton_daemon();
 
     while (1)
@@ -80,7 +82,6 @@ int main()
         //TODO: Insert daemon code here.
         syslog (LOG_NOTICE, "Mysniffer started.");
         sniff();
-//        sleep (20);
         break;
     }
 
