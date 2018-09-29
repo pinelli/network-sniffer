@@ -10,6 +10,7 @@
 #include <bits/types/siginfo_t.h>
 #include <signal.h>
 #include <pthread.h>
+#include <asm/errno.h>
 
 void process(unsigned char* buffer);
 
@@ -18,6 +19,8 @@ FILE *logfile;
 
 int hand_pipe[2]; //handler out, sniffer in
 int snif_pipe[2]; //sniffer out, handler in
+
+int sniffer_finished = 0;
 
 void termination_handler(int s){
     fprintf(logfile, "Daemon terminated!!!!!!!!!!!!\n");
@@ -64,7 +67,7 @@ void* sniff(void *socket){
             fflush(logfile);
             data_size = recvfrom(sock_raw , buffer , 65536 , 0 , &saddr , &saddr_size);
             if(data_size < 0 ){
-                fprintf(logfile, "\n < 0\n");
+                fprintf(logfile, "\n < 0,,,%d ::: %d\n", EAGAIN, EWOULDBLOCK);
                 fflush(logfile);
                 break;
             }
@@ -77,7 +80,12 @@ void* sniff(void *socket){
 //            read (hand_pipe[0], &val, 1);
 //            val = 'o'; //ok
 //            write (snif_pipe[1], &val, 1);
+
+            sniffer_finished = 1;
             break;
+        } else{
+            fprintf(logfile, "\n LOL\n");
+            fflush(logfile);
         }
     }
     fprintf(logfile, "Finished sniffing");
@@ -96,10 +104,21 @@ int create_socket(char *ifname){
 
     int rc = setsockopt(sock_raw, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname));
     if (rc < 0){
-        fprintf(logfile, "Failed binding socket to ifname %s\n", (char*)ifname);
+        fprintf(logfile, "Failed binding socket to ifname %s\n", ifname);
         fflush(logfile);
         return -1;
     }
+
+//    struct timeval timeout;
+//    timeout.tv_sec = 0;
+//    timeout.tv_usec = 0;
+//
+//    if (setsockopt (sock_raw, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,
+//                    sizeof(timeout)) < 0){
+//        fprintf(logfile, "Failed setting socket timeout %s\n", ifname);
+//        fflush(logfile);
+//        return -1;
+//    }
     return sock_raw;
 }
 
@@ -150,23 +169,9 @@ int controller()
 
 
     start_handler();
-//    fprintf(logfile, "OK1\n");
-//    fflush(logfile);
-//
-////    sleep(3);
-    char val;
-//    fprintf(logfile, "OK2\n");
-//    fflush(logfile);
-//
-////
-    int res = read(snif_pipe[0], &val, 1);
-////
-////    fprintf(logfile, "\n THE END, %d\n", res);
-//    fprintf(logfile, "\n THE END!\n");
-//    fflush(logfile);
 
-    while(1){}
-
+    while(!sniffer_finished){}
+    fprintf(logfile, "\n THE END!\n");
 }
 
 void process(unsigned char* buffer){
