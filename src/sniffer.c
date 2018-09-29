@@ -16,12 +16,15 @@ void process(unsigned char* buffer);
 int sock_raw;
 FILE *logfile;
 
+int hand_pipe[2]; //handler out, sniffer in
+int snif_pipe[2]; //sniffer out, handler in
 
 void termination_handler(int s){
     fprintf(logfile, "Daemon terminated!!!!!!!!!!!!\n");
+    char ch = 'i';
+    int res = write (hand_pipe[1], &ch,1);
     fflush(logfile);
-    close(sock_raw);
-//    shutdown(sock_raw, SHUT_RDWR);
+//    close(sock_raw);
 }
 
 void create_logger(){
@@ -33,67 +36,95 @@ void create_logger(){
     }
 }
 
-void* sniff(void *ifname){
+int max_fd(int a, int b){
+    return a >= b?a:b;
+}
+
+
+void* sniff(void *socket){
     int saddr_size , data_size;
     struct sockaddr saddr;
-
     unsigned char *buffer = (unsigned char *)malloc(65536);
 
-    sock_raw = socket(AF_INET , SOCK_RAW , IPPROTO_TCP);
-    if(sock_raw < 0)
-    {
-        fprintf(logfile, "Socket Error\n");
-        fflush(logfile);
-        return NULL;
-    }
+    int sock_raw = *(int*)socket;
 
-    int rc = setsockopt(sock_raw, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname));
-    if (rc < 0)
-        err(1, "Failed binding socket to ifname %s", ifname);
+    fd_set readfds;
+
+    saddr_size = sizeof saddr;
 
     while(1)
     {
-        saddr_size = sizeof saddr;
+        FD_ZERO(&readfds);
+        FD_SET(sock_raw, &readfds);
+        FD_SET(hand_pipe[0], &readfds);
+        select(max_fd(sock_raw, hand_pipe[0]) + 1, &readfds, NULL, NULL, NULL);
 
-        data_size = recvfrom(sock_raw , buffer , 65536 , 0 , &saddr , &saddr_size);
-        if(data_size < 0 )
+        if(FD_ISSET(sock_raw, &readfds)){
+            fprintf(logfile, "\n FD_ISSET\n");
+            fflush(logfile);
+            data_size = recvfrom(sock_raw , buffer , 65536 , 0 , &saddr , &saddr_size);
+            if(data_size < 0 ){
+                fprintf(logfile, "\n < 0\n");
+                fflush(logfile);
+                break;
+            }
+            process(buffer);
+        }
+        else if(FD_ISSET(hand_pipe[0], &readfds)){
+            fprintf(logfile, "\n GOT TERMINATION\n");
+            fflush(logfile);
+            char val;
+            read (hand_pipe[0], &val, 1);
+//            val = 'o'; //ok
+//            write (snif_pipe[1], &val, 1);
             break;
-
-        process(buffer);
+        }
     }
     fprintf(logfile, "Finished sniffing");
     fflush(logfile);
 
-//    while(1){
-//        fprintf(logfile, "sniffing on %s\n", (char*) ifname);
-//        fflush(logfile);
-//        sleep(3);
-//    }
     return NULL;
 }
 
-int sniffer()
-{
-    int saddr_size , data_size;
-    struct sockaddr saddr;
+int create_socket(char *ifname){
+    sock_raw = socket(AF_INET , SOCK_RAW , IPPROTO_TCP);
+    if(sock_raw < 0) {
+        fprintf(logfile, "Socket Error\n");
+        fflush(logfile);
+        return -1;
+    }
 
-    unsigned char *buffer = (unsigned char *)malloc(65536);
+    int rc = setsockopt(sock_raw, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname));
+    if (rc < 0){
+        fprintf(logfile, "Failed binding socket to ifname %s\n", (char*)ifname);
+        fflush(logfile);
+        return -1;
+    }
+    return sock_raw;
+}
 
-    pthread_t thread1;
-    int  thread_err;
-
-    create_logger();
-
-    signal(SIGTERM, termination_handler);
-    signal(SIGINT, termination_handler);
-
-    fprintf(logfile, "Starting...\n");
-    fflush(logfile);
-
+void start_handler(){
     char ifname[] = "enp2s0";
+    pthread_t sniffer;
+    int  thread_err;
+    int pipe_res;
 
+    int socket = create_socket(ifname);
 
-    thread_err = pthread_create( &thread1, NULL, sniff, (void*) ifname);
+    pipe_res = pipe(hand_pipe);
+    if (pipe_res < 0){
+        fprintf(logfile, "Cannot create handler->sniffer pipe\n");
+        fflush(logfile);
+        return;
+    }
+    pipe_res = pipe(snif_pipe);
+    if (pipe_res < 0){
+        fprintf(logfile, "Cannot create sniffer->handler pipe\n");
+        fflush(logfile);
+        return;
+    }
+
+    thread_err = pthread_create(&sniffer, NULL, sniff, &socket);
 
     if (thread_err != 0){
         fprintf(logfile, "\ncan't create thread :[%s]", strerror(thread_err));
@@ -102,39 +133,30 @@ int sniffer()
         fprintf(logfile, "\n Thread created successfully\n");
         fflush(logfile);
     }
-    fprintf(logfile, "Wait for a thread\n");
+    fprintf(logfile, "End start handler\n");
+}
+
+int controller()
+{
+    create_logger();
+
+    signal(SIGTERM, termination_handler);
+    signal(SIGINT, termination_handler);
+
+    fprintf(logfile, "Starting...\n");
     fflush(logfile);
 
-    pthread_join(thread1, NULL);
+    start_handler();
 
-
-
-
-
-
-//    sock_raw = socket(AF_INET , SOCK_RAW , IPPROTO_TCP);
-//    if(sock_raw < 0)
-//    {
-//        fprintf(logfile, "Socket Error\n");
-//        fflush(logfile);
-//        return 1;
-//    }
+//    char val;
+//    while(read(snif_pipe[0], &val, 1) != 1){}
 //
-//    int rc = setsockopt(sock_raw, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname));
-//    if (rc < 0)
-//        err(1, "Failed binding socket to ifname %s", ifname);
+//    fprintf(logfile, "\n THE END\n");
+//    fflush(logfile);
 //
-//    while(1)
-//    {
-//        saddr_size = sizeof saddr;
-//        data_size = recvfrom(sock_raw , buffer , 65536 , 0 , &saddr , &saddr_size);
-//        if(data_size < 0 )
-//            break;
-//
-//        process(buffer);
-//    }
-    fprintf(logfile, "Exit");
-    fflush(logfile);
+//    return 0;
+    while(1){}
+
 
 }
 

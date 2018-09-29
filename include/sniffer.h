@@ -5,6 +5,6 @@
 #ifndef SIRINTASK_SNIFFER_H
 #define SIRINTASK_SNIFFER_H
 
-int sniffer();
+int controller();
 
 #endif //SIRINTASK_SNIFFER_H
