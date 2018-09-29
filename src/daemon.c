@@ -81,7 +81,7 @@ int main()
     {
         //TODO: Insert daemon code here.
         syslog (LOG_NOTICE, "Mysniffer started.");
-        sniff();
+        sniffer();
         break;
     }
 

@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS=-Iinclude # -Wall
+FLAGS=-Iinclude -pthread # -Wall
 TARGET=sniffer
 
 sniffer: src/sniffer.c src/daemon.c include/sniffer.h
