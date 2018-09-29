@@ -73,8 +73,8 @@ void* sniff(void *socket){
         else if(FD_ISSET(hand_pipe[0], &readfds)){
             fprintf(logfile, "\n GOT TERMINATION\n");
             fflush(logfile);
-            char val;
-            read (hand_pipe[0], &val, 1);
+//            char val;
+//            read (hand_pipe[0], &val, 1);
 //            val = 'o'; //ok
 //            write (snif_pipe[1], &val, 1);
             break;
@@ -134,6 +134,8 @@ void start_handler(){
         fflush(logfile);
     }
     fprintf(logfile, "End start handler\n");
+    fflush(logfile);
+
 }
 
 int controller()
@@ -146,17 +148,24 @@ int controller()
     fprintf(logfile, "Starting...\n");
     fflush(logfile);
 
-    start_handler();
 
-//    char val;
-//    while(read(snif_pipe[0], &val, 1) != 1){}
-//
-//    fprintf(logfile, "\n THE END\n");
+    start_handler();
+//    fprintf(logfile, "OK1\n");
 //    fflush(logfile);
 //
-//    return 0;
-    while(1){}
+////    sleep(3);
+    char val;
+//    fprintf(logfile, "OK2\n");
+//    fflush(logfile);
+//
+////
+    int res = read(snif_pipe[0], &val, 1);
+////
+////    fprintf(logfile, "\n THE END, %d\n", res);
+//    fprintf(logfile, "\n THE END!\n");
+//    fflush(logfile);
 
+    while(1){}
 
 }
 
